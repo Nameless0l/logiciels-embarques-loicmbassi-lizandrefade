@@ -173,7 +173,7 @@ brew install libpcap wireshark
 
 ```bash
 # Cloner le projet
-git clone <url-du-repo>
+git clone https://github.com/Nameless0l/pcap_analyzer
 cd pcap_analyzer
 
 # Compiler le projet
@@ -226,9 +226,6 @@ cargo run -- --cards
 # Capture de 20 trames beacon sur wlan0mon
 sudo cargo run -- --interface wlan0mon --filter "wlan type mgt subtype beacon" --packet-count 20
 ```
-
-> ⚠️ **Note** : La capture en temps réel nécessite une carte Wi-Fi en **mode monitor** et des droits **root/sudo**.
-
 ![Capture live](./screenshots/live_capture.png)
 
 ---
@@ -296,7 +293,7 @@ Le programme décode la pile protocolaire complète d'un paquet Wi-Fi capturé e
 │ Radiotap Header (taille variable, octets 2-3 = len)     │
 ├─────────────────────────────────────────────────────────┤
 │ 802.11 MAC Header (24 octets pour beacon)               │
-│   ├─ Frame Control: type=0 (mgmt), subtype=8 (beacon)  │
+│   ├─ Frame Control: type=0 (mgmt), subtype=8 (beacon)   │
 │   ├─ Duration                                           │
 │   ├─ Address 1 (Destination)                            │
 │   ├─ Address 2 (Source / Transmitter) ← MAC du drone    │
@@ -309,12 +306,12 @@ Le programme décode la pile protocolaire complète d'un paquet Wi-Fi capturé e
 │   └─ Capability Info (2 octets)                         │
 ├─────────────────────────────────────────────────────────┤
 │ Tagged Parameters (TLV, taille variable)                │
-│   ├─ Tag 0x00: SSID                                    │
+│   ├─ Tag 0x00: SSID                                     │
 │   ├─ Tag 0x01: Supported Rates                          │
 │   ├─ Tag 0x03: DS Parameter (canal)                     │
 │   ├─ ...                                                │
-│   └─ Tag 0xDD: Vendor Specific ← DroneID ici           │
-│       ├─ OUI: 6A:5C:35                                 │
+│   └─ Tag 0xDD: Vendor Specific ← DroneID ici            │
+│       ├─ OUI: 6A:5C:35                                  │
 │       ├─ VS Type: 0x01                                  │
 │       └─ Payload TLV DroneID                            │
 └─────────────────────────────────────────────────────────┘
