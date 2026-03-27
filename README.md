@@ -70,18 +70,8 @@ fn main() {
 }
 ```
 
-Sortie attendue :
-
-```
-[
-    Lexeme { kind: "FORWARD",  raw: "forward", position: (1, 1) },
-    Lexeme { kind: "NUMBER",   raw: "100",     position: (1, 9) },
-    Lexeme { kind: "LEFT",     raw: "left",    position: (1, 13) },
-    Lexeme { kind: "NUMBER",   raw: "90",      position: (1, 18) },
-    Lexeme { kind: "FORWARD",  raw: "forward", position: (1, 21) },
-    Lexeme { kind: "NUMBER",   raw: "50",      position: (1, 29) },
-]
-```
+Sortie
+![alt text](image.png)
 
 ### Parser (grammaire simplifiée, sans AST)
 
@@ -120,7 +110,7 @@ fn main() {
     println!("{}", parse_trees);
 }
 ```
-
+![alt text](image-1.png)
 ---
 
 ## Partie 2c : AST et grammaire typée
@@ -369,7 +359,7 @@ fn main() {
     println!("{}", svg);
 }
 ```
-
+![alt text](output.svg)
 ---
 
 ## Partie 4 (Bonus) : Grammaire étendue
