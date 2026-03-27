@@ -1,6 +1,7 @@
 # Compilateur et Interpréteur Logo en Rust
 
-
+![Figure](image.png)
+![Figure](image-1.png)
 
 ## Résultats générés
 
