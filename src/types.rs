@@ -1,3 +1,4 @@
+use svg_fmt::*;
 #[derive(Debug, Clone)]
 pub enum AST {
     //L'énoncé nous demande de rassembler ainsi
@@ -8,6 +9,10 @@ pub enum AST {
     Backward,
     Left,
     Right,
+    PenUp,
+    PenDown,
+    Repeat(Vec<AST>),
+    Block(Vec<AST>),
     Number(i32),
     None,
 }
@@ -23,21 +28,29 @@ pub struct Logo {
 impl Logo {
     pub fn new() -> Self {
         Self {
-            x: 150.0,
-            y: 150.0,
+            x: 50.0,
+            y: 350.0,
             angle: 0.0,
             pen_down: true,
             svg_content: String::new(),
         }
     }
-
     pub fn compile(&mut self, ast: &AST) -> String {
         self.walk(ast);
         format!(
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"500\" height=\"500\">\n{}</svg>\n",
-            self.svg_content
-        ) //Nous envoie à un site où le carré est déjà dessiné - le but est de vérifier que les instructions fonctionne pour l'instant
+            "{}\n{}{}",
+            BeginSvg { w: 500.0, h: 500.0 },
+            self.svg_content,
+            EndSvg
+        ) //
     }
+    // pub fn compile(&mut self, ast: &AST) -> String {
+    //     self.walk(ast);
+    //     format!(
+    //         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"500\" height=\"500\">\n{}</svg>\n",
+    //         self.svg_content
+    //     ) //Nous envoie à un site où le carré est déjà dessiné - le but est de vérifier que les instructions fonctionne pour l'instant
+    // }
 
     pub fn walk(&mut self, ast: &AST) {
         match ast {
@@ -53,6 +66,16 @@ impl Logo {
                     }
                 }
             }
+            AST::Repeat(children) => {
+                if let AST::Number(n) = &children[1] {
+                    for _ in 0..*n {
+                        self.walk(&children[2]);
+                    }
+                }
+            }
+            AST::Block(children) => children.iter().for_each(|c| self.walk(c)),
+            AST::PenUp => self.pen_down = false,
+            AST::PenDown => self.pen_down = true,
             _ => {}
         }
     }
