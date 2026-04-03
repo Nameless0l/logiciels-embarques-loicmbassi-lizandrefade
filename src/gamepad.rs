@@ -1,48 +1,9 @@
-#![no_main]
-#![no_std]
+#![allow(dead_code)]
 
-use defmt::info;
-use embassy_executor::Spawner;
-use embassy_stm32::Config;
-use embassy_stm32::gpio::{Input, Pin, Pull};
-use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_time::Timer;
-use {defmt_rtt as _, panic_probe as _};
+use embassy_stm32::gpio::{AnyPin, Input, Pull};
+use embassy_stm32::Peri;
 
-use core::cell::Cell;
-
-static HISTORY_LEN: usize = 10;
-static NB_BTN: usize = 5;
-
-static HISTORY_TOP: [Cell<bool>; 10] = [Cell::new(false); 10];
-static HISTORY_BOTTOM: [Cell<bool>; 10] = [Cell::new(false); 10];
-static HISTORY_RIGHT: [Cell<bool>; 10] = [Cell::new(false); 10];
-static HISTORY_LEFT: [Cell<bool>; 10] = [Cell::new(false); 10];
-static HISTORY_CENTER: [Cell<bool>; 10] = [Cell::new(false); 10];
-
-static BUTTON_CURRENT_STATE: [Cell<bool>; 5] = [Cell::new(false); 5];
-static BUTTON_PREVIOUS_STATE: [Cell<bool>; 5] = [Cell::new(false); 5];
-
-static INDEX: Cell<usize> = Cell::new(0);
-
-//Cell est une astuce permettant de façon safe de modifer une variable déclarée static
-
-pub struct Button<'a> {
-    pub id: ButtonId,
-    pub pin: &'a Pin<'a, Input<Pull::Up>>,
-}
-
-#[derive(Debug)]
-struct GamepadState {
-    top: bool,
-    bottom: bool,
-    right: bool,
-    left: bool,
-    center: bool,
-}
-
-#[derive(Copy, Clone)]
-pub enum ButtonId {
+pub enum Button {
     Top,
     Bottom,
     Right,
@@ -50,96 +11,56 @@ pub enum ButtonId {
     Center,
 }
 
-//Donne quel bouton a été appuyé en prenant en compte les rebonds
-pub fn push_buttons_state(
-    top: &Button,
-    bottom: &Button,
-    right: &Button,
-    left: &Button,
-    center: &Button,
-) {
-    let i = INDEX.get();
-
-    HISTORY_TOP[i].set(top.pin.is_high());
-    HISTORY_BOTTOM[i].set(bottom.pin.is_high());
-    HISTORY_RIGHT[i].set(right.pin.is_high());
-    HISTORY_LEFT[i].set(left.pin.is_high());
-    HISTORY_CENTER[i].set(center.pin.is_high());
-
-    INDEX.set((i + 1) % HISTORY_LEN);
+pub struct GamepadState {
+    pub top: bool,
+    pub bottom: bool,
+    pub right: bool,
+    pub left: bool,
+    pub center: bool,
 }
 
-pub fn all_true_in_list(history: &[Cell<bool>; HISTORY_LEN]) -> bool {
-    for i in 0..HISTORY_LEN {
-        if history[i].get() != true {
-            return false;
+pub struct Gamepad {
+    top: Input<'static>,
+    bottom: Input<'static>,
+    right: Input<'static>,
+    left: Input<'static>,
+    center: Input<'static>,
+}
+
+impl Gamepad {
+    pub fn new(
+        top: Peri<'static, AnyPin>,
+        bottom: Peri<'static, AnyPin>,
+        right: Peri<'static, AnyPin>,
+        left: Peri<'static, AnyPin>,
+        center: Peri<'static, AnyPin>,
+    ) -> Self {
+        Self {
+            top: Input::new(top, Pull::Up),
+            bottom: Input::new(bottom, Pull::Up),
+            right: Input::new(right, Pull::Up),
+            left: Input::new(left, Pull::Up),
+            center: Input::new(center, Pull::Up),
         }
     }
-    return true;
-}
 
-pub fn all_false_in_list(history: &[Cell<bool>; HISTORY_LEN]) -> bool {
-    for i in 0..HISTORY_LEN {
-        if history[i].get() != false {
-            return false;
+    pub fn is_pressed(&self, button: &Button) -> bool {
+        match button {
+            Button::Top => self.top.is_low(),
+            Button::Bottom => self.bottom.is_low(),
+            Button::Right => self.right.is_low(),
+            Button::Left => self.left.is_low(),
+            Button::Center => self.center.is_low(),
         }
     }
-    return true;
-}
 
-pub fn modyfying_current_state() {
-    let listof_HISTORIES: [&[Cell<bool>; HISTORY_LEN]; 5] = [
-        &HISTORY_TOP,
-        &HISTORY_BOTTOM,
-        &HISTORY_RIGHT,
-        &HISTORY_LEFT,
-        &HISTORY_CENTER,
-    ]; //Array
-    let mut i = 0;
-    for x in listof_HISTORIES {
-        //&listof_HISTORIES permet de traiter la référence et non une copie
-        if (all_true_in_list(x) == true) {
-            BUTTON_CURRENT_STATE[i].set(true);
+    pub fn poll(&self) -> GamepadState {
+        GamepadState {
+            top: self.top.is_low(),
+            bottom: self.bottom.is_low(),
+            right: self.right.is_low(),
+            left: self.left.is_low(),
+            center: self.center.is_low(),
         }
-        if (all_false_in_list(x) == true) {
-            BUTTON_CURRENT_STATE[i].set(false);
-        }
-        i += 1;
-    }
-}
-
-pub fn modifying_previous_state() {
-    for i in 0..NB_BTN {
-        BUTTON_PREVIOUS_STATE[i].set(BUTTON_CURRENT_STATE[i].get());
-    }
-}
-
-pub fn impulse_button_changed_state(btn: &Button) -> bool {
-    match btn.id {
-        ButtonId::Top => BUTTON_PREVIOUS_STATE[0].get() != BUTTON_CURRENT_STATE[0].get(),
-        ButtonId::Bottom => BUTTON_PREVIOUS_STATE[1].get() != BUTTON_CURRENT_STATE[1].get(),
-        ButtonId::Right => BUTTON_PREVIOUS_STATE[2].get() != BUTTON_CURRENT_STATE[2].get(),
-        ButtonId::Left => BUTTON_PREVIOUS_STATE[3].get() != BUTTON_CURRENT_STATE[3].get(),
-        ButtonId::Center => BUTTON_PREVIOUS_STATE[4].get() != BUTTON_CURRENT_STATE[4].get(),
-    }
-}
-
-pub fn is_pressed(btn: &Button) -> bool {
-    match btn.id {
-        ButtonId::Top => BUTTON_CURRENT_STATE[0].get(),
-        ButtonId::Bottom => BUTTON_CURRENT_STATE[1].get(),
-        ButtonId::Right => BUTTON_CURRENT_STATE[2].get(),
-        ButtonId::Left => BUTTON_CURRENT_STATE[3].get(),
-        ButtonId::Center => BUTTON_CURRENT_STATE[4].get(),
-    }
-}
-
-pub fn button_pool() -> GamepadState {
-    GamepadState {
-        top: BUTTON_CURRENT_STATE[0].get(),
-        bottom: BUTTON_CURRENT_STATE[1].get(),
-        right: BUTTON_CURRENT_STATE[2].get(),
-        left: BUTTON_CURRENT_STATE[3].get(),
-        center: BUTTON_CURRENT_STATE[4].get(),
     }
 }

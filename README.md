@@ -17,7 +17,8 @@ src/
 ├── stepper_example.rs    # Démo stepper : rotation aller-retour
 ├── stepper_encoder.rs    # Démo combinée : encodeur contrôle vitesse/direction moteur
 ├── display_example.rs    # Démo écran OLED SSD1306
-├── gamepad.rs            # Driver gamepad (WIP)
+├── gamepad.rs            # Driver gamepad (5 boutons)
+├── gamepad_example.rs    # Démo gamepad : affichage état boutons via defmt
 └── main.rs               # Point d'entrée minimal
 ```
 
@@ -63,6 +64,24 @@ bargraph.set_value(50); // allume 4 LEDs sur 8
 **Démo :** `cargo run --bin bargraph_example`
 
 ![Démo bargraph](docs/demo_bargraph.gif)
+
+---
+
+### Gamepad
+
+Driver `Gamepad` pour la croix de 5 boutons (haut, bas, gauche, droite, centre). Lecture synchrone par polling, actif bas avec Pull::Up.
+
+```rust
+let pad = Gamepad::new(
+    board.gamepad.top, board.gamepad.bottom,
+    board.gamepad.right, board.gamepad.left, board.gamepad.center,
+);
+
+let state = pad.poll();             // lecture de tous les boutons
+pad.is_pressed(&Button::Center)     // lecture d'un bouton spécifique
+```
+
+**Démo :** `cargo run --bin gamepad_example`
 
 ---
 
@@ -166,6 +185,7 @@ display.init().unwrap();
 
 ```bash
 cargo run --bin bargraph_example
+cargo run --bin gamepad_example
 cargo run --bin encoder_example
 cargo run --bin stepper_example
 cargo run --bin stepper_encoder
