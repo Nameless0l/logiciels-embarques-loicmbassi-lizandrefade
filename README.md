@@ -93,19 +93,6 @@ Driver `Encoder` basé sur `embassy_stm32::timer::qei::Qei` (interface QEI maté
 - Accès direct aux registres PAC pour `set_position` et `reset`
 - Lecture du bouton intégré (actif bas, Pull::Up)
 
-```rust
-let mut enc = Encoder::new(
-    board.encoder.timer,
-    board.encoder.ch_a,
-    board.encoder.ch_b,
-    board.encoder.button,
-);
-
-let pos = enc.position();   // position relative au centre
-enc.set_position(0);        // repositionne le compteur
-enc.reset();                // remet à zéro
-enc.is_pressed()            // état du bouton
-```
 
 **Démo :** `cargo run --bin encoder_example`
 
@@ -207,3 +194,6 @@ Prérequis : [`probe-rs`](https://probe.rs/) installé et carte connectée via S
 | `ssd1306` | 0.10 | Driver écran OLED SSD1306 |
 | `embedded-graphics` | 0.8 | Dessin/texte pour écran |
 | `defmt` + `defmt-rtt` | 1.x | Logs via RTT |
+
+
+By Loic Aron Mbassi Ewolo & Lizandre Fade
