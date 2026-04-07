@@ -82,7 +82,7 @@ pad.is_pressed(&Button::Center)     // lecture d'un bouton spécifique
 ```
 
 **Démo :** `cargo run --bin gamepad_example`
-
+![Demo gamepad](docs/gamepad.png)
 ---
 
 ### Encodeur rotatif
