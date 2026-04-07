@@ -80,7 +80,6 @@ async fn gamepad_task(_spawner: Spawner) {
     }
 }
 
-//----------------Aefff en dessous
 static GAMEPAD_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 async fn wait_and_update() {

@@ -72,7 +72,7 @@ async fn encoder_task(mut enc: Encoder) {
                 tim2.cr1().modify(|w| w.set_cen(false));
 
                 // 2. Remettre CNT à zéro
-                tim2.cnt().write_value(5000); //bzarrement il faut le mettre à 5000 et non zéro
+                tim2.cnt().write_value(5000); //bizarrement il faut le mettre à 5000 et non zéro
 
                 // 3. Redémarrer le timer
                 tim2.cr1().modify(|w| w.set_cen(true));
