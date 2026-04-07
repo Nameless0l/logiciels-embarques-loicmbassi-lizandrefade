@@ -61,9 +61,6 @@ async fn encoder_task(mut enc: Encoder) {
 
     loop {
         match select(ENCODER_RESET_SIGNAL.wait(), Timer::after_millis(50)).await {
-            // -------------------------
-            // RESET DEMANDÉ
-            // -------------------------
             Either::First(_) => {
                 info!("Reset encodeur demandé");
 
