@@ -38,18 +38,20 @@ pub struct MagnetoPins {
 }
 
 pub struct EncoderPins {
-    pub button: Peri<'static, AnyPin>,
+    pub button: Peri<'static, PA15>,
+    pub exti:   Peri<'static, EXTI15>,
     pub ch_a:   Peri<'static, PA0>,
     pub ch_b:   Peri<'static, PA1>,
     pub timer:  Peri<'static, TIM2>,
 }
 
 pub struct StepperPins {
-    pub dir: Peri<'static, AnyPin>,
-    pub ms1: Peri<'static, AnyPin>,
-    pub ms2: Peri<'static, AnyPin>,
+    pub dir:    Peri<'static, AnyPin>,
+    pub ms1:    Peri<'static, AnyPin>,
+    pub ms2:    Peri<'static, AnyPin>,
     pub enable: Peri<'static, AnyPin>,
-    pub step: Peri<'static, AnyPin>,
+    pub step:   Peri<'static, PA6>,
+    pub timer:  Peri<'static, TIM3>,
 }
 
 pub struct Usart1Pins {
@@ -134,17 +136,19 @@ impl Board {
                 int: p.PB0.into(),
             },
             encoder: EncoderPins {
-                button: p.PA15.into(),
+                button: p.PA15,
+                exti:   p.EXTI15,
                 ch_a:   p.PA0,
                 ch_b:   p.PA1,
                 timer:  p.TIM2,
             },
             stepper: StepperPins {
-                dir: p.PA7.into(),
-                ms1: p.PA11.into(),
-                ms2: p.PB12.into(),
+                dir:    p.PA7.into(),
+                ms1:    p.PA11.into(),
+                ms2:    p.PB12.into(),
                 enable: p.PA12.into(),
-                step: p.PA6.into(),
+                step:   p.PA6,
+                timer:  p.TIM3,
             },
             usart1: Usart1Pins {
                 tx: p.PA9.into(),

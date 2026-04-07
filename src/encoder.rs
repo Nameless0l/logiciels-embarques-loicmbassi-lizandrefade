@@ -1,14 +1,18 @@
+use core::sync::atomic::{AtomicI32, Ordering};
+
+use embassy_stm32::Peri;
 use embassy_stm32::gpio::{AnyPin, Input, Pull};
 use embassy_stm32::peripherals::{PA0, PA1, TIM2};
 use embassy_stm32::timer::qei::{Config, Qei};
-use embassy_stm32::Peri;
+
+static ENCODER_POSITION: AtomicI32 = AtomicI32::new(0);
 
 const CENTER: u32 = 5_000;
 const MAX: u32 = 10_000;
 
 pub struct Encoder {
     qei: Qei<'static, TIM2>,
-    button: Input<'static>,
+    button: Option<Input<'static>>,
 }
 
 impl Encoder {
@@ -25,7 +29,24 @@ impl Encoder {
         tim2.cnt().write_value(CENTER);
 
         let button = Input::new(button, Pull::Up);
-        Self { qei, button }
+        Self {
+            qei,
+            button: Some(button),
+        }
+    }
+
+    pub fn new_without_button(
+        timer: Peri<'static, TIM2>,
+        ch_a: Peri<'static, PA0>,
+        ch_b: Peri<'static, PA1>,
+    ) -> Self {
+        let qei = Qei::new(timer, ch_a, ch_b, Config::default());
+
+        let tim2 = embassy_stm32::pac::TIM2;
+        tim2.arr().write_value(MAX);
+        tim2.cnt().write_value(CENTER);
+
+        Self { qei, button: None }
     }
 
     pub fn position(&self) -> i32 {
@@ -42,6 +63,16 @@ impl Encoder {
     }
 
     pub fn is_pressed(&self) -> bool {
-        self.button.is_low()
+        self.button.as_ref().is_some_and(|b| b.is_low())
+    }
+
+    /// Met à jour la position partagée. Appelable depuis encoder_task.
+    pub fn update_position(pos: i32) {
+        ENCODER_POSITION.store(pos, Ordering::Relaxed);
+    }
+
+    /// Lit la position partagée. Appelable depuis n'importe quelle tâche.
+    pub fn get_position() -> i32 {
+        ENCODER_POSITION.load(Ordering::Relaxed)
     }
 }

@@ -1,8 +1,15 @@
 #![allow(dead_code)]
 
+use core::sync::atomic::{AtomicU32, Ordering};
+
 use embassy_stm32::Peri;
 use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 use heapless::Vec;
+
+static BARGRAPH_LEVEL: AtomicU32 = AtomicU32::new(0);
+static BARGRAPH_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 pub struct Bargraph<const N: usize> {
     leds: Vec<Output<'static>, N>,
@@ -50,5 +57,17 @@ impl<const N: usize> Bargraph<N> {
         for led in self.leds.iter_mut() {
             led.set_low();
         }
+    }
+
+    /// Met à jour la valeur partagée et notifie la tâche bargraph.
+    pub fn update_value(new_value: u32) {
+        BARGRAPH_LEVEL.store(new_value, Ordering::Relaxed);
+        BARGRAPH_SIGNAL.signal(());
+    }
+
+    pub async fn wait_and_update(&mut self) {
+        BARGRAPH_SIGNAL.wait().await;
+        let level = BARGRAPH_LEVEL.load(Ordering::Relaxed);
+        self.set_value(level as i32);
     }
 }

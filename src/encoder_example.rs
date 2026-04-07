@@ -22,7 +22,7 @@ async fn main(_spawner: Spawner) {
         board.encoder.timer,
         board.encoder.ch_a,
         board.encoder.ch_b,
-        board.encoder.button,
+        board.encoder.button.into(),
     );
 
     loop {

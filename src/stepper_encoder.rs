@@ -15,10 +15,9 @@ use encoder::Encoder;
 use stepper::{Direction, MicrostepMode, Stepper};
 use {defmt_rtt as _, panic_probe as _};
 
-const DELAY_MAX_US: u64 = 5_000;
-const DELAY_MIN_US: u64 = 200;
-const DELAY_RANGE_US: u64 = 4_800;
 const MAX_SPEED: i32 = 500;
+const MIN_SPS: u32 = 50;      // pas/s au niveau de vitesse minimum
+const MAX_SPS: u32 = 1_000;   // pas/s au niveau de vitesse maximum
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -31,13 +30,14 @@ async fn main(_spawner: Spawner) {
         board.stepper.ms2,
         board.stepper.enable,
         board.stepper.step,
+        board.stepper.timer,
     );
 
     let mut enc = Encoder::new(
         board.encoder.timer,
         board.encoder.ch_a,
         board.encoder.ch_b,
-        board.encoder.button,
+        board.encoder.button.into(),
     );
 
     motor.set_microstep(MicrostepMode::Eighth);
@@ -47,9 +47,10 @@ async fn main(_spawner: Spawner) {
     let mut prev_pos = enc.position();
 
     loop {
-        // Bouton : arrêt et reset
+        // Bouton : arrêt immédiat et reset de la vitesse
         if enc.is_pressed() {
             speed = 0;
+            motor.stop();
             enc.reset();
             prev_pos = 0;
             info!("Stop");
@@ -66,20 +67,24 @@ async fn main(_spawner: Spawner) {
         speed = speed.saturating_add(delta).clamp(-MAX_SPEED, MAX_SPEED);
 
         if speed == 0 {
-            Timer::after_millis(10).await;
-            continue;
-        }
-
-        if speed > 0 {
-            motor.set_direction(Direction::Clockwise);
+            motor.stop();
         } else {
-            motor.set_direction(Direction::CounterClockwise);
+            let direction = if speed > 0 {
+                Direction::Clockwise
+            } else {
+                Direction::CounterClockwise
+            };
+
+            // Interpolation linéaire MIN_SPS..MAX_SPS selon la valeur absolue de speed
+            let abs_speed = speed.unsigned_abs().min(MAX_SPEED as u32);
+            let sps = MIN_SPS.saturating_add(
+                (MAX_SPS.saturating_sub(MIN_SPS)).saturating_mul(abs_speed) / MAX_SPEED as u32,
+            );
+
+            info!("speed={} sps={}", speed, sps);
+            motor.set_speed(sps, direction);
         }
 
-        let abs_speed = speed.unsigned_abs().min(MAX_SPEED as u32) as u64;
-        let delay = DELAY_MAX_US
-            .saturating_sub(DELAY_RANGE_US.saturating_mul(abs_speed) / MAX_SPEED as u64);
-
-        motor.step(delay).await;
+        Timer::after_millis(20).await;
     }
 }

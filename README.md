@@ -1,170 +1,86 @@
-# TP3 — Rust Embarqué : Embassy & Périphériques
+# TP4(Suite et fin du TP 3 partie3 + 4 + Bonus) : Rust Embarqué : Embassy & Périphériques
 
-Firmware embarqué pour la carte ENSEA basée sur une **Nucleo-64 STM32L476RG**, développé en Rust avec [Embassy](https://embassy.dev/).
+## Partie 3 : Tâches asynchrones avec état partagé
 
----
+Le programme `task.rs` décompose le système en **6 tâches async concurrentes** communiquant via des variables atomiques et des signaux Embassy.
 
-## Structure du projet
+### Architecture
 
 ```
-src/
-├── bsp-ensea.rs          # Board Support Package — mapping pins/périphériques
-├── bargraph.rs           # Driver bargraph 8 LEDs (générique)
-├── bargraph_example.rs   # Démo bargraph : montée/descente en boucle
-├── encoder.rs            # Driver encodeur rotatif (QEI + bouton)
-├── encoder_example.rs    # Démo encodeur : position + reset au bouton
-├── stepper.rs            # Driver moteur pas à pas (TMC2226)
-├── stepper_example.rs    # Démo stepper : rotation aller-retour
-├── stepper_encoder.rs    # Démo combinée : encodeur contrôle vitesse/direction moteur
-├── display_example.rs    # Démo écran OLED SSD1306
-├── gamepad.rs            # Driver gamepad (5 boutons)
-├── gamepad_example.rs    # Démo gamepad : affichage état boutons via defmt
-└── main.rs               # Point d'entrée minimal
+encoder_task (2000 ms)
+    ├── position → BARGRAPH_LEVEL ──→ BARGRAPH_SIGNAL ──→ bargraph_task → LEDs
+    └── position → STEPPER_SPEED/DIR → STEPPER_SIGNAL ──→ stepper_task  → moteur PWM
+
+gamepad_task (50 ms)
+    └── poll → GAMEPAD_STATE (AtomicU8)
+
+emergency_stop_task (EXTI falling edge)
+    └── bouton encodeur → arrêt moteur + RAZ encodeur
+
+display_task (200 ms)
+    └── lit tous les états partagés → affiche sur OLED
 ```
 
----
+### Variables partagées
 
-## Partie 1 — Board Support Package (BSP)
+| Variable | Type | Définie dans | Producteur | Consommateur |
+|---|---|---|---|---|
+| `BARGRAPH_LEVEL` | `AtomicU32` | `bargraph.rs` | `encoder_task` | `bargraph_task` |
+| `BARGRAPH_SIGNAL` | `Signal<CriticalSectionRawMutex, ()>` | `bargraph.rs` | `encoder_task` | `bargraph_task` |
+| `STEPPER_SPEED` | `AtomicU32` | `stepper.rs` | `encoder_task` | `stepper_task` |
+| `STEPPER_DIRECTION` | `AtomicU8` | `stepper.rs` | `encoder_task` | `stepper_task` |
+| `STEPPER_SIGNAL` | `Signal<CriticalSectionRawMutex, ()>` | `stepper.rs` | `encoder_task` | `stepper_task` |
+| `ENCODER_POSITION` | `AtomicI32` | `encoder.rs` | `encoder_task` | `display_task` |
+| `GAMEPAD_STATE` | `AtomicU8` | `gamepad.rs` | `gamepad_task` | `display_task` |
 
-Le BSP (`bsp-ensea.rs`) centralise toutes les associations pins ↔ périphériques de la carte ENSEA. Il expose une struct `Board` initialisée une seule fois depuis `embassy_stm32::init()`.
+### Méthodes statiques des drivers
 
-| Périphérique | Struct BSP | Pins |
-|---|---|---|
-| Bargraph (8 LEDs) | `BargraphPins` | PC7, PB2, PA8, PB1, PB15, PB4, PB14, PB5 |
-| GPS | `GpsPins` | PB13 |
-| GPIO | `GpioPins` | PA5 (LED), PC13 (bouton) |
-| Gamepad | `GamepadPins` | PC8, PB11, PC9, PC6, PC5 |
-| Magnétomètre | `MagnetoPins` | PC1, PB0 |
-| Encodeur rotatif | `EncoderPins` | PA15 (btn), PA0/PA1 (QEI), TIM2 |
-| Moteur pas à pas | `StepperPins` | PA7, PA11, PB12, PA12, PA6 |
-| USART1 | `Usart1Pins` | PA9/PA10 |
-| USART2 | `Usart2Pins` | PA2/PA3 |
-| SPI2 | `Spi2Pins` | PB10, PC3, PC2, PC0 |
-| I2C1 | `I2c1Pins` | PB6 (SCL) / PB7 (SDA) |
-| Connecteur libre | `ConnectorPins` | PC10–PC12, PB8/PB9, PD2 |
-
-Les pins GPIO sont stockées sous forme de `Peri<'static, AnyPin>` (type effacé). Les pins nécessitant un trait spécifique (ex: `TimerPin` pour le QEI, `SclPin`/`SdaPin` pour l'I2C) conservent leur type concret.
-
----
-
-## Partie 2 — Drivers
-
-### Bargraph
-
-Driver générique `Bargraph<const N: usize>` — fonctionne avec n'importe quel nombre de LEDs.
+Chaque driver expose des méthodes statiques appelables depuis n'importe quelle tâche :
 
 ```rust
-let mut bargraph: Bargraph<8> = Bargraph::new([
-    board.bargraph.led0, /* ... */ board.bargraph.led7,
-]);
-bargraph.set_range(0, 100);
-bargraph.set_value(50); // allume 4 LEDs sur 8
+// Depuis encoder_task :
+Bargraph::<8>::update_value(level);      // met à jour + signale
+Stepper::update_speed(speed, direction); // met à jour + signale
+
+// Depuis display_task (lecture seule) :
+Stepper::get_speed();                    // → u32
+Stepper::get_direction();                // → Direction
+Encoder::get_position();                 // → i32
+Gamepad::get_shared_state();             // → GamepadState
 ```
 
-**Démo :** `cargo run --bin bargraph_example`
 
-![Démo bargraph](docs/demo_bargraph.gif)
+### Démo combinée
+
+**Démo :** `cargo run --bin task`
+
+![Démo stepper + encodeur + bargraph](docs/demo_steper_encodeur_bargraph.gif)
+### Arrêt d'urgence
+
+Le bouton central de l'encodeur est configuré en **interruption EXTI** (front descendant). Quand il est pressé :
+1. Arrêt immédiat du moteur (`STEPPER_SPEED = 0`)
+2. RAZ du bargraph
+3. Désactivation du timer encodeur (TIM2) et compteur remis à zéro
+![Task bargraph + stepper](docs/task_bargraph_stepper.png)
+![Démo arrêt d'urgence](docs/demo_emergency.gif)
 
 ---
 
-### Gamepad
+## Bonus : Affichage OLED en temps réel
 
-Driver `Gamepad` pour la croix de 5 boutons (haut, bas, gauche, droite, centre). Lecture synchrone par polling, actif bas avec Pull::Up.
+La `display_task` affiche sur l'écran OLED SSD1306 l'état complet du système, rafraîchi toutes les 200 ms :
 
-```rust
-let pad = Gamepad::new(
-    board.gamepad.top, board.gamepad.bottom,
-    board.gamepad.right, board.gamepad.left, board.gamepad.center,
-);
-
-let state = pad.poll();             // lecture de tous les boutons
-pad.is_pressed(&Button::Center)     // lecture d'un bouton spécifique
+```
+Motor: 200 sps CW
+Encoder: 10
+Pad: . B . R .
 ```
 
-**Démo :** `cargo run --bin gamepad_example`
-![Demo gamepad](docs/gamepad.png)
----
+- **Ligne 1** : vitesse moteur (pas/s) et direction (CW / CCW)
+- **Ligne 2** : position de l'encodeur rotatif
+- **Ligne 3** : état du gamepad (T/B/L/R/C ou `.` si relâché)
 
-### Encodeur rotatif
-
-Driver `Encoder` basé sur `embassy_stm32::timer::qei::Qei` (interface QEI matérielle via TIM2).
-
-- Compteur centré sur 5000 (plage 0–10 000), position relative retournée en `i32`
-- Accès direct aux registres PAC pour `set_position` et `reset`
-- Lecture du bouton intégré (actif bas, Pull::Up)
-
-
-**Démo :** `cargo run --bin encoder_example`
-
-| Rotation | Bouton pressé → reset |
-|---|---|
-| ![Encodeur rotation](docs/encodeur_2.png) | ![Encodeur reset](docs/encodeur_1.png) |
-
----
-
-### Moteur pas à pas (TMC2226)
-
-Driver `Stepper` pour le TMC2226 — contrôle direction, microstepping et génération des impulsions STEP.
-
-| Mode | MS1 | MS2 |
-|---|---|---|
-| Full | 0 | 0 |
-| Half | 1 | 0 |
-| Quarter | 0 | 1 |
-| Eighth | 1 | 1 |
-
-```rust
-let mut motor = Stepper::new(
-    board.stepper.dir, board.stepper.ms1, board.stepper.ms2,
-    board.stepper.enable, board.stepper.step,
-);
-motor.set_microstep(MicrostepMode::Eighth);
-motor.enable();
-motor.set_direction(Direction::Clockwise);
-motor.move_steps(200, 500).await; // 200 pas, demi-période 500 µs
-```
-
-**Démo :** `cargo run --bin stepper_example`
-
-| Rotation aller-retour | Sortie terminal |
-|---|---|
-| ![Démo stepper](docs/demo_steper.gif) | ![Terminal stepper](docs/steper_terminal_outpout.png) |
-
----
-
-### Encodeur + Moteur pas à pas
-
-Contrôle de la vitesse et direction du moteur via l'encodeur rotatif.
-
-- Tourner dans le sens horaire → accélère (sens horaire)
-- Tourner dans le sens anti-horaire → ralentit, puis repart en sens inverse
-- Cliquer → arrêt immédiat, vitesse remise à zéro
-
-```rust
-// Voir src/stepper_encoder.rs
-```
-
-**Démo :** `cargo run --bin stepper_encoder`
-
-![Démo encodeur + stepper](docs/steper_encodeur.gif)
-
----
-
-### Écran OLED SSD1306 (I2C)
-
-Affichage via `ssd1306` + `embedded-graphics` sur bus I2C1 (PB6/PB7).
-
-```rust
-let i2c = I2c::new_blocking(board.i2c1.i2c, board.i2c1.scl, board.i2c1.sda, Default::default());
-let interface = I2CDisplayInterface::new(i2c);
-let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-    .into_buffered_graphics_mode();
-display.init().unwrap();
-```
-
-**Démo :** `cargo run --bin display_example`
-
-![Démo écran OLED](docs/demo_display.gif)
+![Démo OLED](docs/demo_OLED.gif)
 
 ---
 
@@ -177,6 +93,7 @@ cargo run --bin encoder_example
 cargo run --bin stepper_example
 cargo run --bin stepper_encoder
 cargo run --bin display_example
+cargo run --bin task              # programme complet (6 tâches)
 ```
 
 Prérequis : [`probe-rs`](https://probe.rs/) installé et carte connectée via ST-Link.
@@ -190,10 +107,11 @@ Prérequis : [`probe-rs`](https://probe.rs/) installé et carte connectée via S
 | `embassy-stm32` | 0.5.0 | HAL STM32L476RG |
 | `embassy-executor` | 0.9.1 | Runtime async embarqué |
 | `embassy-time` | 0.5.0 | Timers async |
+| `embassy-sync` | 0.7.2 | Signal, Mutex (synchronisation inter-tâches) |
 | `heapless` | 0.9.2 | Collections sans heap |
 | `ssd1306` | 0.10 | Driver écran OLED SSD1306 |
 | `embedded-graphics` | 0.8 | Dessin/texte pour écran |
 | `defmt` + `defmt-rtt` | 1.x | Logs via RTT |
 
 
-By Loic Aron Mbassi Ewolo & Lizandre Fade
+By [Loic Aron Mbassi Ewolo](https://github.com/Nameless0l) & Lizandre Fade

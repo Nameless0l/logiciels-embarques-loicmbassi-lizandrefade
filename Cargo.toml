@@ -17,6 +17,7 @@ embassy-executor = { version = "0.9.1", features = [
 embassy-time = { version = "0.5.0", features = [
     "defmt", "defmt-timestamp-uptime", "tick-hz-32_768",
 ] }
+embassy-futures = "0.1.0"
 defmt = "1.0.1"
 defmt-rtt = "1.1.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
@@ -51,3 +52,11 @@ path = "src/stepper_encoder.rs"
 [[bin]]
 name = "display_example"
 path = "src/display_example.rs"
+
+[[bin]]
+name = "task"
+path = "src/task.rs"
+
+[[bin]]
+name = "temp"
+path = "src/temp.rs"

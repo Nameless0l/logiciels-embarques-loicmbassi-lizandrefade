@@ -12,7 +12,6 @@ use embassy_stm32::Config;
 use embassy_time::Timer;
 use stepper::{Direction, MicrostepMode, Stepper};
 use {defmt_rtt as _, panic_probe as _};
-
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(Config::default());
@@ -24,22 +23,25 @@ async fn main(_spawner: Spawner) {
         board.stepper.ms2,
         board.stepper.enable,
         board.stepper.step,
+        board.stepper.timer,
     );
 
     motor.set_microstep(MicrostepMode::Eighth);
     motor.enable();
 
     loop {
-        info!("Sens horaire — 200 pas");
-        motor.set_direction(Direction::Clockwise);
-        motor.move_steps(200, 500).await;
+        info!("Sens horaire — 300 pas/s");
+        motor.set_speed(300, Direction::Clockwise);
+        Timer::after_secs(2).await;
 
+        motor.stop();
         Timer::after_millis(500).await;
 
-        info!("Sens anti-horaire — 200 pas");
-        motor.set_direction(Direction::CounterClockwise);
-        motor.move_steps(200, 500).await;
+        info!("Sens anti-horaire — 300 pas/s");
+        motor.set_speed(300, Direction::CounterClockwise);
+        Timer::after_secs(2).await;
 
+        motor.stop();
         Timer::after_millis(500).await;
     }
 }
